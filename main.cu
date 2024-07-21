@@ -34,12 +34,7 @@ int main()
     //print_dataset2D(centroids, DIM_DATASET);
 
     auto start_conv = std::chrono::high_resolution_clock::now();
-        //points are to be saved in constant memory
 
-    //Move points in global memory
-
-    //for(int i = 0; i < DIM_DATASET; ++i)
-    //    meanshift_convergence(&centroids.x[i], &centroids.y[i], data, DIM_DATASET);
     meanshift_convergence(centroids, data, DIM_DATASET);
     
     auto stop_conv = std::chrono::high_resolution_clock::now();
