@@ -18,8 +18,6 @@ inline bool is_neighbour2D(float c_x, float c_y, float p_x, float p_y, float ban
     return euclidian_norm2D(c_x - p_x, c_y - p_y) < bandwidth? true:false;
 }
 
-
-
 __global__
 void centroid_convergence_kernel(float* d_centroid_x, float* d_centroid_y, float* d_points_x, float* d_points_y, int num_points)
 {
@@ -144,6 +142,197 @@ void meanshift_merge(dataset2D centroids, int num_points)
     cudaFree(d_centroid_y);
     cudaFree(d_centroids_labels);
     cudaFree(d_label);
+
+    return;
+}
+
+
+
+
+//---------------------------------------------------------------------------------------------------
+
+
+__global__
+void centroid_convergence_kernel_2(float* d_centroid_x, float* d_centroid_y, float* d_points_x, float* d_points_y, int num_points, float* d_ms_x, float* d_ms_y, int* d_num_neighbours)
+{
+    int i = blockDim.x*blockIdx.x + threadIdx.x;
+    bool check = false;//automatic variable
+    //float bandwidth = BANDWIDTH;
+    if(i < num_points)
+    {
+        check = is_neighbour2D(*d_centroid_x, *d_centroid_y, d_points_x[i], d_points_y[i], BANDWIDTH);
+        if(check)
+        {
+            //accumulate the coordinates of the point
+            //atomic addition to accumulate the coordinates
+            atomicAdd(d_ms_x, d_points_x[i]);
+            atomicAdd(d_ms_y, d_points_y[i]);
+            atomicAdd(d_num_neighbours, 1);
+            //check = false;
+        } 
+    }  
+}
+
+void meanshift_convergence_2(dataset2D centroids, dataset2D points, int num_points)
+{
+    float *d_centroid_x;
+    float *d_centroid_y;
+
+    float *d_points_x;
+    float *d_points_y;
+
+    float* d_meanshift_x;
+    float* d_meanshift_y;
+
+    int* d_num_neighbours;
+
+    cudaMalloc((void**) &d_centroid_x, sizeof(float)*num_points);
+    cudaMemcpy(d_centroid_x, centroids.x, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+    cudaMalloc((void**) &d_centroid_y, sizeof(float)*num_points);
+    cudaMemcpy(d_centroid_y, centroids.y, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**) &d_points_x, sizeof(float)*num_points);
+    cudaMemcpy(d_points_x, points.x, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+    cudaMalloc((void**) &d_points_y, sizeof(float)*num_points);
+    cudaMemcpy(d_points_y, points.y, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+
+    //Meanshift x and y
+    cudaMalloc((void**) &d_meanshift_x, sizeof(float));
+    cudaMemset(d_meanshift_x, 0, sizeof(float));
+    cudaMalloc((void**) &d_meanshift_y, sizeof(float));
+    cudaMemset(d_meanshift_y, 0, sizeof(float));
+
+    //Nukmber of Neighbours
+    cudaMalloc((void**) &d_num_neighbours, sizeof(int));
+    cudaMemset(d_num_neighbours, 0, sizeof(int));
+
+    //KERNEL CALL
+    //We will have a 1d block
+    bool converged = false;
+    for(int i = 0; i < num_points; i++)
+    {
+        converged = false;
+        cudaMemset(d_meanshift_x, 0, sizeof(float));
+        cudaMemset(d_meanshift_y, 0, sizeof(float));
+
+        while(converged == false)
+        {
+            centroid_convergence_kernel_2<<<ceil(num_points/1024.0), 1024>>>(&d_centroid_x[i], &d_centroid_y[i], d_points_x, d_points_y, num_points, d_meanshift_x, d_meanshift_y, d_num_neighbours);
+            /*
+            *d_meanshift_x = *d_meanshift_x/(float)*d_num_neighbours;
+            *d_meanshift_y = *d_meanshift_y/(float)*d_num_neighbours;
+            if(euclidian_norm2D(d_centroid_x[i] - *d_meanshift_x, d_centroid_y[i] -*d_meanshift_y) < THRESHOLD)
+                converged = true;
+            else
+                d_centroid_x[i] = *d_meanshift_x;
+                d_centroid_y[i] = *d_meanshift_y;
+            */
+        }  
+    }
+
+    
+
+    cudaMemcpy(centroids.x, d_centroid_x, sizeof(float)*num_points, cudaMemcpyDeviceToHost);
+    cudaMemcpy(centroids.y, d_centroid_y, sizeof(float)*num_points, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_centroid_x);
+    cudaFree(d_centroid_y);
+    cudaFree(d_points_x);
+    cudaFree(d_points_y);
+    cudaFree(d_meanshift_x);
+    cudaFree(d_meanshift_y);
+    cudaFree(d_num_neighbours);
+
+    return;
+}
+
+__global__
+void merge_clusters_kernel_2(float* d_centroid_x, float* d_centroid_y, float* d_points_x, float* d_points_y, int num_points, float* d_ms_x, float* d_ms_y, int* d_num_neighbours)
+{
+    int i = blockDim.x*blockIdx.x + threadIdx.x;
+    bool check = false;//automatic variable
+    //float bandwidth = BANDWIDTH;
+    if(i < num_points)
+    {
+        check = is_neighbour2D(*d_centroid_x, *d_centroid_y, d_points_x[i], d_points_y[i], BANDWIDTH);
+        if(check)
+        {
+            //ASSIGN LABEL
+            return;
+            
+        } 
+    } 
+}
+
+void meanshift_merge_2(dataset2D centroids, dataset2D points, int num_points)
+{
+    float *d_centroid_x;
+    float *d_centroid_y;
+
+    float *d_points_x;
+    float *d_points_y;
+
+    float* d_meanshift_x;
+    float* d_meanshift_y;
+
+    int* d_num_neighbours;
+
+    cudaMalloc((void**) &d_centroid_x, sizeof(float)*num_points);
+    cudaMemcpy(d_centroid_x, centroids.x, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+    cudaMalloc((void**) &d_centroid_y, sizeof(float)*num_points);
+    cudaMemcpy(d_centroid_y, centroids.y, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void**) &d_points_x, sizeof(float)*num_points);
+    cudaMemcpy(d_points_x, points.x, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+    cudaMalloc((void**) &d_points_y, sizeof(float)*num_points);
+    cudaMemcpy(d_points_y, points.y, sizeof(float)*num_points, cudaMemcpyHostToDevice);
+
+    //Meanshift x and y
+    cudaMalloc((void**) &d_meanshift_x, sizeof(float));
+    cudaMemset(d_meanshift_x, 0, sizeof(float));
+    cudaMalloc((void**) &d_meanshift_y, sizeof(float));
+    cudaMemset(d_meanshift_y, 0, sizeof(float));
+
+    //Nukmber of Neighbours
+    cudaMalloc((void**) &d_num_neighbours, sizeof(int));
+    cudaMemset(d_num_neighbours, 0, sizeof(int));
+
+    //KERNEL CALL
+    //We will have a 1d block
+    bool converged = false;
+    for(int i = 0; i < num_points; i++)
+    {
+        converged = false;
+        cudaMemset(d_meanshift_x, 0, sizeof(float));
+        cudaMemset(d_meanshift_y, 0, sizeof(float));
+
+        while(converged == false)
+        {
+            centroid_convergence_kernel_2<<<ceil(num_points/1024.0), 1024>>>(&d_centroid_x[i], &d_centroid_y[i], d_points_x, d_points_y, num_points, d_meanshift_x, d_meanshift_y, d_num_neighbours);
+            /*
+            *d_meanshift_x = *d_meanshift_x/(float)*d_num_neighbours;
+            *d_meanshift_y = *d_meanshift_y/(float)*d_num_neighbours;
+            if(euclidian_norm2D(d_centroid_x[i] - *d_meanshift_x, d_centroid_y[i] -*d_meanshift_y) < THRESHOLD)
+                converged = true;
+            else
+                d_centroid_x[i] = *d_meanshift_x;
+                d_centroid_y[i] = *d_meanshift_y;
+            */
+        }  
+    }
+
+    
+
+    cudaMemcpy(centroids.x, d_centroid_x, sizeof(float)*num_points, cudaMemcpyDeviceToHost);
+    cudaMemcpy(centroids.y, d_centroid_y, sizeof(float)*num_points, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_centroid_x);
+    cudaFree(d_centroid_y);
+    cudaFree(d_points_x);
+    cudaFree(d_points_y);
+    cudaFree(d_meanshift_x);
+    cudaFree(d_meanshift_y);
+    cudaFree(d_num_neighbours);
 
     return;
 }
